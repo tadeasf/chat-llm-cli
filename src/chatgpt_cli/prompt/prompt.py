@@ -77,6 +77,8 @@ def start_prompt(
         "code_blocks": code_blocks,
     }
 
+    multiline_mode = config.get("multiline", False)  # Initial multiline state from config
+
     while True:
         current_cost = 0
         if config.get("budget_enabled") and config.get("budget_user"):
@@ -102,16 +104,24 @@ def start_prompt(
             prompt_text += f"<style fg='#f38ba8'>[Cost: ${current_cost:.6f}]</style>"
         prompt_text += "\n>>> "
 
-        kb = create_keybindings(config.get("multiline", False))
+        kb = create_keybindings(multiline_mode)
         message = session.prompt(
             HTML(prompt_text),
-            multiline=config.get("multiline", False),
+            multiline=multiline_mode,
             key_bindings=kb,
         )
 
         # Handle special commands
         if message.lower().strip() == "/q":
             raise EOFError
+        elif message.lower().strip() == "/m":
+            multiline_mode = True
+            console.print("Multiline mode enabled")
+            continue
+        elif message.lower().strip() == "/s":
+            multiline_mode = False
+            console.print("Single-line mode enabled")
+            continue
         elif message.lower().startswith("/c"):
             handle_copy_command(message, config, code_blocks)
             continue
@@ -207,6 +217,10 @@ def print_markdown(content: str, code_blocks: Optional[dict] = None):
             parts = line.strip().split("```", 1)
             current_language = parts[1].strip() if len(parts) > 1 else ""
         elif line.strip() == "```" and code_block_open:
+            code_block_open = True
+            parts = line.strip().split("```", 1)
+            current_language = parts[1].strip() if len(parts) > 1 else ""
+        elif line.strip() == "```" and code_block_open:
             code_block_open = False
             block_content = "\n".join(current_block)
             syntax = Syntax(
@@ -272,6 +286,7 @@ def print_markdown(content: str, code_blocks: Optional[dict] = None):
         }
 
     return code_blocks
+
 
 
 def open_editor_with_content(content: str):
