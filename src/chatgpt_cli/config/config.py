@@ -4,6 +4,7 @@ import yaml
 from xdg_base_dirs import xdg_config_home
 from typing import Any, Dict
 from litellm import BudgetManager
+import toml
 
 BASE = Path(xdg_config_home(), "chatgpt-cli")
 CONFIG_FILE = BASE / "config.yaml"
@@ -77,6 +78,16 @@ def load_config(config_file: Path) -> Dict[str, Any]:
         merged_config["storage_format"] = "markdown"
 
     return merged_config
+
+def get_version_from_pyproject() -> str:
+    """Retrieve the version from pyproject.toml."""
+    # Construct the path relative to the project root
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    pyproject_path = project_root / "pyproject.toml"
+    
+    with open(pyproject_path, "r") as f:
+        pyproject_data = toml.load(f)
+    return pyproject_data["project"]["version"]
 
 
 def create_save_folder():

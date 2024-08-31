@@ -101,6 +101,14 @@ class PathCompleter(Completer):
             except OSError:
                 pass  # Handle permission errors or non-existent directories
 
+@app.command()
+def version():
+    """
+    Show the version of the downloader CLI.
+    """
+    from .config.config import get_version_from_pyproject
+
+    typer.echo(get_version_from_pyproject())
 
 @app.command(name="")
 def main(
