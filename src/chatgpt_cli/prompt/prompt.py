@@ -78,6 +78,8 @@ def start_prompt(
     }
 
     multiline_mode = config.get("multiline", False)  # Initial multiline state from config
+    command_history = []  # Initialize command history
+    history_index = -1  # Initialize history index
 
     while True:
         current_cost = 0
@@ -105,11 +107,24 @@ def start_prompt(
         prompt_text += "\n>>> "
 
         kb = create_keybindings(multiline_mode)
+
+        @kb.add("up")
+        def _(event):
+            nonlocal history_index
+            if command_history:
+                history_index = (history_index - 1) % len(command_history)
+                event.app.current_buffer.text = command_history[history_index]
+                event.app.current_buffer.cursor_position = len(event.app.current_buffer.text)
+
         message = session.prompt(
             HTML(prompt_text),
             multiline=multiline_mode,
             key_bindings=kb,
         )
+
+        # Append the command to history
+        command_history.append(message)
+        history_index = len(command_history)  # Reset history index
 
         # Handle special commands
         if message.lower().strip() == "/q":
@@ -128,11 +143,36 @@ def start_prompt(
         elif message.lower().strip() == "/e":
             open_editor_with_last_response(messages)
             continue
+        elif message.lower().strip() == "/h":
+            save_and_open_session(config, messages)
+            continue
         elif message.lower().strip() == "":
             raise KeyboardInterrupt
         else:
             return {"role": "user", "content": message}, code_blocks
 
+
+
+def save_and_open_session(config: Dict[str, Any], messages: List[Dict[str, str]]) -> None:
+    """Saves the current session as a Markdown file and opens it in the default editor.
+
+    Args:
+        config: The configuration dictionary.
+        messages: The list of messages in the conversation.
+    """
+    from chatgpt_cli.config.config import get_session_filename, SAVE_FOLDER
+    from chatgpt_cli.prompt.history import save_history
+
+    # Generate a unique filename for the session
+    save_file = get_session_filename()
+
+    # Save the session history
+    save_history(config, config["model"], messages, save_file, storage_format="markdown")
+
+    # Open the saved file in the default editor
+    with open(os.path.join(SAVE_FOLDER, save_file), "r") as file:
+        content = file.read()
+    open_editor_with_content(content)
 
 def handle_copy_command(
     message: str,
