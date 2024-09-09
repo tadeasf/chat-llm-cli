@@ -219,23 +219,28 @@ def handle_copy_command(
             elif code_blocks:
                 last_block_id = max(code_blocks.keys())
                 pyperclip.copy(code_blocks[last_block_id]["content"])
-
                 console.print(
-                    "Copied last code block to clipboard", style="#a6e3a1"
-                )  # Catppuccin Green
+                    f"Copied last code block (ID: {last_block_id}) to clipboard", 
+                    style="#a6e3a1"  # Catppuccin Green
+                )
             else:
                 console.print(
-                    "No code blocks available to copy", style="#f38ba8"
-                )  # Catppuccin Red
+                    "No code blocks available to copy", style="#f38ba8"  # Catppuccin Red
+                )
         else:
             console.print(
-                "Invalid copy command format", style="#f38ba8"
-            )  # Catppuccin Red
+                "Invalid copy command format", style="#f38ba8"  # Catppuccin Red
+            )
+        
+        # Print available code block IDs
+        if code_blocks:
+            console.print("\nAvailable code block IDs:", style="#89dceb")  # Catppuccin Sky
+            for block_id, block_info in code_blocks.items():
+                console.print(f"  [{block_id}] {block_info['language']} ({len(block_info['content'].split('\n'))} lines)")
     else:
         console.print(
-            "Easy copy is disabled in the configuration", style="#f38ba8"
-        )  # Catppuccin Red
-
+            "Easy copy is disabled in the configuration", style="#f38ba8"  # Catppuccin Red
+        )
 
 def print_markdown(content: str, code_blocks: Optional[dict] = None):
     """Prints the given content as markdown with integrated code blocks.
@@ -247,91 +252,43 @@ def print_markdown(content: str, code_blocks: Optional[dict] = None):
     if code_blocks is None:
         code_blocks = {}
 
-    lines = content.split("\n")
-    code_block_open = False
-    current_block = []
-    current_language = ""
+    # Split the content into markdown and code blocks
+    parts = re.split(r'(```[\s\S]*?```)', content)
+    
     block_index = 1
-    text_buffer = []
-
-    for line in lines:
-        if line.strip().startswith("```") and not code_block_open:
-            # Print any accumulated text before the code block
-            if text_buffer:
-                console.print(Markdown("\n".join(text_buffer), justify="left"))
-                text_buffer = []
-
-            code_block_open = True
-            parts = line.strip().split("```", 1)
-            current_language = parts[1].strip() if len(parts) > 1 else ""
-        elif line.strip() == "```" and code_block_open:
-            code_block_open = True
-            parts = line.strip().split("```", 1)
-            current_language = parts[1].strip() if len(parts) > 1 else ""
-        elif line.strip() == "```" and code_block_open:
-            code_block_open = False
-            block_content = "\n".join(current_block)
+    for part in parts:
+        if part.startswith('```') and part.endswith('```'):
+            # Handle code blocks
+            lines = part.split('\n')
+            language = lines[0].strip('`').strip() or 'text'
+            code = '\n'.join(lines[1:-1])
+            
             syntax = Syntax(
-                block_content,
-                current_language or "text",
+                code,
+                language,
                 theme=MochaStyle,
                 line_numbers=True,
+                word_wrap=True,
             )
             panel = Panel(
                 syntax,
                 expand=False,
                 border_style="#89dceb",  # Catppuccin Sky
-                title=f"Code Block {block_index} - {current_language}"
-                if current_language
-                else f"Code Block {block_index}",
+                title=f"Code Block {block_index} - {language}",
                 title_align="left",
             )
             console.print(panel)
-
+            
             # Add the code block to the dictionary
             code_blocks[str(block_index)] = {
-                "content": block_content,
-                "language": current_language,
+                "content": code,
+                "language": language,
             }
-
             block_index += 1
-            current_block = []
-            current_language = ""
-        elif code_block_open:
-            current_block.append(line)
         else:
-            # Accumulate text lines
-            text_buffer.append(line)
-
-    # Print any remaining text
-    if text_buffer:
-        console.print(Markdown("\n".join(text_buffer), justify="left"))
-
-    # Handle any remaining open code block
-    if code_block_open and current_block:
-        block_content = "\n".join(current_block)
-        syntax = Syntax(
-            block_content,
-            current_language or "text",
-            theme=MochaStyle,
-            line_numbers=True,
-        )
-        panel = Panel(
-            syntax,
-            expand=False,
-            border_style="#89dceb",  # Catppuccin Sky
-            title=f"Code Block {block_index} - {current_language}"
-            if current_language
-            else f"Code Block {block_index}",
-            title_align="left",
-        )
-        console.print(panel)
-
-        # Add the last code block to the dictionary
-        code_blocks[str(block_index)] = {
-            "content": block_content,
-            "language": current_language,
-        }
+            # Handle regular markdown
+            md = Markdown(part.strip())
+            console.print(md)
 
     return code_blocks
 
@@ -380,54 +337,22 @@ def extract_code_blocks(content: str, code_blocks: Dict[str, Dict[str, str]]):
         content: The content to extract code blocks from.
         code_blocks: A dictionary to store the extracted code blocks.
     """
-    lines = content.split("\n")
-    code_block_id = 1 + max(map(int, code_blocks.keys()), default=0)
-    code_block_open = False
-    code_block_content = []
-    code_block_language = ""
-
-    for line in lines:
-        if line.strip().startswith("```") and not code_block_open:
-            code_block_open = True
-            parts = line.strip().split("```", 1)
-            code_block_language = parts[1].strip() if len(parts) > 1 else ""
-        elif line.strip() == "```" and code_block_open:
-            code_block_open = False
-            snippet_text = "\n".join(code_block_content)
-            code_blocks[str(code_block_id)] = {
-                "content": snippet_text,
-                "language": code_block_language,
-            }
-            code_block_id += 1
-            code_block_content = []
-            code_block_language = ""
-        elif code_block_open:
-            code_block_content.append(line)
-
-    if code_block_open:
-        snippet_text = "\n".join(code_block_content)
-        code_blocks[str(code_block_id)] = {
-            "content": snippet_text,
-            "language": code_block_language,
+    # Clear existing code blocks
+    code_blocks.clear()
+    
+    # Use regex to find all code blocks
+    pattern = r'```(\w+)?\n([\s\S]*?)```'
+    matches = re.finditer(pattern, content)
+    
+    for index, match in enumerate(matches, start=1):
+        language = match.group(1) or 'text'
+        code = match.group(2).strip()
+        code_blocks[str(index)] = {
+            "content": code,
+            "language": language,
         }
 
     return code_blocks
-
-
-# def print_code_block_summary(code_blocks: Dict[str, Dict[str, str]]):
-#     """Prints a summary of the extracted code blocks.
-
-#     Args:
-#         code_blocks: A dictionary of code blocks extracted from the LLM response.
-#     """
-#     if code_blocks:
-#         console.print("\nCode blocks:", style="bold")
-#         for block_id, block_info in code_blocks.items():
-#             title = f" - {block_info['title']}" if block_info["title"] else ""
-#             console.print(
-#                 f"  [{block_id}] {block_info['language']}{title} "
-#                 f"({len(block_info['content'].split('\n'))} lines)"
-#             )
 
 
 def add_markdown_system_message(messages: List[Dict[str, str]]) -> None:
